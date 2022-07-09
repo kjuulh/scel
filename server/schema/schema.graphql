@@ -1,0 +1,22 @@
+type Query {
+  downloads(userId: ID!): [Download!]
+}
+
+enum DownloadStatus {
+  DONE
+  INPROGRESS
+  NOTSTARTED
+  ERROR
+}
+
+type Download {
+  id: ID!
+  userId: ID!
+  link: String!
+  status: DownloadStatus!
+  progress: Float
+  createdAt: Time!
+  updatedAt: Time
+}
+
+scalar Time

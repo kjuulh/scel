@@ -1,0 +1,14 @@
+schema:
+  - schema/schema.graphql
+# Where should the generated server code go?
+exec:
+  filename: internal/generated/graphql/exec.go
+  package: graphql
+model:
+  filename: internal/generated/graphql/model.go
+  package: graphql
+# Where should the resolver implementations go?
+resolver:
+  filename: "internal/graphql/resolver.go"
+  package: graphql
+  type: resolver
