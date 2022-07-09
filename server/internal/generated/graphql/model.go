@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+type CreateDownload struct {
+	Link   string `json:"link"`
+	UserID string `json:"userId"`
+}
+
 type Download struct {
 	ID        string         `json:"id"`
 	UserID    string         `json:"userId"`

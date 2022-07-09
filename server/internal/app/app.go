@@ -1,18 +1,24 @@
 package app
 
 import (
+	"github.com/kjuulh/scel/server/internal/persistence"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
 
-var tracer = otel.Tracer("scel_server")
-
 type App struct {
-	Tracer trace.Tracer
+	Tracer         trace.Tracer
+	DownloadsStore persistence.DownloadsStore
 }
 
 func NewApp() *App {
+	var (
+		tracer         = otel.Tracer("scel_server")
+		downloadsStore = persistence.NewInMemoryDownloadsStore()
+	)
+
 	return &App{
-		Tracer: tracer,
+		Tracer:         tracer,
+		DownloadsStore: downloadsStore,
 	}
 }

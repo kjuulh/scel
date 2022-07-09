@@ -13,7 +13,6 @@ import (
 )
 
 func ObservabilityMiddleware(ctx context.Context, next http.Handler, method string) http.Handler {
-
 	meter := global.Meter("scel-meter")
 	serverAttribute := attribute.String("scel-attribute", "scel-server")
 	commonLabels := []attribute.KeyValue{serverAttribute}

@@ -2,6 +2,19 @@ type Query {
   downloads(userId: ID!): [Download!]
 }
 
+type Mutation {
+  addDownload(download: CreateDownload!): Download!
+}
+
+type Subscription {
+  subscribeDownloads(userId: ID!): [Download!]
+}
+
+input CreateDownload {
+  link: String!
+  userId: ID!
+}
+
 enum DownloadStatus {
   DONE
   INPROGRESS

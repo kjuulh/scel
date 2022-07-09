@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"time"
@@ -35,7 +36,9 @@ type Config struct {
 }
 
 type ResolverRoot interface {
+	Mutation() MutationResolver
 	Query() QueryResolver
+	Subscription() SubscriptionResolver
 }
 
 type DirectiveRoot struct {
@@ -52,13 +55,27 @@ type ComplexityRoot struct {
 		UserID    func(childComplexity int) int
 	}
 
+	Mutation struct {
+		AddDownload func(childComplexity int, download CreateDownload) int
+	}
+
 	Query struct {
 		Downloads func(childComplexity int, userID string) int
 	}
+
+	Subscription struct {
+		SubscribeDownloads func(childComplexity int, userID string) int
+	}
 }
 
+type MutationResolver interface {
+	AddDownload(ctx context.Context, download CreateDownload) (*Download, error)
+}
 type QueryResolver interface {
 	Downloads(ctx context.Context, userID string) ([]*Download, error)
+}
+type SubscriptionResolver interface {
+	SubscribeDownloads(ctx context.Context, userID string) (<-chan []*Download, error)
 }
 
 type executableSchema struct {
@@ -125,6 +142,18 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Download.UserID(childComplexity), true
 
+	case "Mutation.addDownload":
+		if e.complexity.Mutation.AddDownload == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_addDownload_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.AddDownload(childComplexity, args["download"].(CreateDownload)), true
+
 	case "Query.downloads":
 		if e.complexity.Query.Downloads == nil {
 			break
@@ -137,6 +166,18 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Query.Downloads(childComplexity, args["userId"].(string)), true
 
+	case "Subscription.subscribeDownloads":
+		if e.complexity.Subscription.SubscribeDownloads == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_subscribeDownloads_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.SubscribeDownloads(childComplexity, args["userId"].(string)), true
+
 	}
 	return 0, false
 }
@@ -144,7 +185,9 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	rc := graphql.GetOperationContext(ctx)
 	ec := executionContext{rc, e}
-	inputUnmarshalMap := graphql.BuildUnmarshalerMap()
+	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
+		ec.unmarshalInputCreateDownload,
+	)
 	first := true
 
 	switch rc.Operation.Operation {
@@ -157,6 +200,38 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 			ctx = graphql.WithUnmarshalerMap(ctx, inputUnmarshalMap)
 			data := ec._Query(ctx, rc.Operation.SelectionSet)
 			var buf bytes.Buffer
+			data.MarshalGQL(&buf)
+
+			return &graphql.Response{
+				Data: buf.Bytes(),
+			}
+		}
+	case ast.Mutation:
+		return func(ctx context.Context) *graphql.Response {
+			if !first {
+				return nil
+			}
+			first = false
+			ctx = graphql.WithUnmarshalerMap(ctx, inputUnmarshalMap)
+			data := ec._Mutation(ctx, rc.Operation.SelectionSet)
+			var buf bytes.Buffer
+			data.MarshalGQL(&buf)
+
+			return &graphql.Response{
+				Data: buf.Bytes(),
+			}
+		}
+	case ast.Subscription:
+		next := ec._Subscription(ctx, rc.Operation.SelectionSet)
+
+		var buf bytes.Buffer
+		return func(ctx context.Context) *graphql.Response {
+			buf.Reset()
+			data := next(ctx)
+
+			if data == nil {
+				return nil
+			}
 			data.MarshalGQL(&buf)
 
 			return &graphql.Response{
@@ -193,6 +268,19 @@ var sources = []*ast.Source{
   downloads(userId: ID!): [Download!]
 }
 
+type Mutation {
+  addDownload(download: CreateDownload!): Download!
+}
+
+type Subscription {
+  subscribeDownloads(userId: ID!): [Download!]
+}
+
+input CreateDownload {
+  link: String!
+  userId: ID!
+}
+
 enum DownloadStatus {
   DONE
   INPROGRESS
@@ -219,6 +307,21 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 
 // region    ***************************** args.gotpl *****************************
 
+func (ec *executionContext) field_Mutation_addDownload_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 CreateDownload
+	if tmp, ok := rawArgs["download"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("download"))
+		arg0, err = ec.unmarshalNCreateDownload2githubᚗcomᚋkjuulhᚋscelᚋserverᚋinternalᚋgeneratedᚋgraphqlᚐCreateDownload(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["download"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
@@ -235,6 +338,21 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 }
 
 func (ec *executionContext) field_Query_downloads_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 string
+	if tmp, ok := rawArgs["userId"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("userId"))
+		arg0, err = ec.unmarshalNID2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["userId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_subscribeDownloads_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
 	var arg0 string
@@ -589,6 +707,77 @@ func (ec *executionContext) fieldContext_Download_updatedAt(ctx context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_addDownload(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_addDownload(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().AddDownload(rctx, fc.Args["download"].(CreateDownload))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*Download)
+	fc.Result = res
+	return ec.marshalNDownload2ᚖgithubᚗcomᚋkjuulhᚋscelᚋserverᚋinternalᚋgeneratedᚋgraphqlᚐDownload(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Mutation_addDownload(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Download_id(ctx, field)
+			case "userId":
+				return ec.fieldContext_Download_userId(ctx, field)
+			case "link":
+				return ec.fieldContext_Download_link(ctx, field)
+			case "status":
+				return ec.fieldContext_Download_status(ctx, field)
+			case "progress":
+				return ec.fieldContext_Download_progress(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Download_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Download_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Download", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_addDownload_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_downloads(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_Query_downloads(ctx, field)
 	if err != nil {
@@ -782,6 +971,88 @@ func (ec *executionContext) fieldContext_Query___schema(ctx context.Context, fie
 			}
 			return nil, fmt.Errorf("no field named %q was found under type __Schema", field.Name)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_subscribeDownloads(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	fc, err := ec.fieldContext_Subscription_subscribeDownloads(ctx, field)
+	if err != nil {
+		return nil
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = nil
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Subscription().SubscribeDownloads(rctx, fc.Args["userId"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return nil
+	}
+	if resTmp == nil {
+		return nil
+	}
+	return func(ctx context.Context) graphql.Marshaler {
+		select {
+		case res, ok := <-resTmp.(<-chan []*Download):
+			if !ok {
+				return nil
+			}
+			return graphql.WriterFunc(func(w io.Writer) {
+				w.Write([]byte{'{'})
+				graphql.MarshalString(field.Alias).MarshalGQL(w)
+				w.Write([]byte{':'})
+				ec.marshalODownload2ᚕᚖgithubᚗcomᚋkjuulhᚋscelᚋserverᚋinternalᚋgeneratedᚋgraphqlᚐDownloadᚄ(ctx, field.Selections, res).MarshalGQL(w)
+				w.Write([]byte{'}'})
+			})
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+func (ec *executionContext) fieldContext_Subscription_subscribeDownloads(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Download_id(ctx, field)
+			case "userId":
+				return ec.fieldContext_Download_userId(ctx, field)
+			case "link":
+				return ec.fieldContext_Download_link(ctx, field)
+			case "status":
+				return ec.fieldContext_Download_status(ctx, field)
+			case "progress":
+				return ec.fieldContext_Download_progress(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Download_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Download_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Download", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_subscribeDownloads_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return
 	}
 	return fc, nil
 }
@@ -2559,6 +2830,42 @@ func (ec *executionContext) fieldContext___Type_specifiedByURL(ctx context.Conte
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputCreateDownload(ctx context.Context, obj interface{}) (CreateDownload, error) {
+	var it CreateDownload
+	asMap := map[string]interface{}{}
+	for k, v := range obj.(map[string]interface{}) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"link", "userId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "link":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("link"))
+			it.Link, err = ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		case "userId":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("userId"))
+			it.UserID, err = ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		}
+	}
+
+	return it, nil
+}
+
 // endregion **************************** input.gotpl *****************************
 
 // region    ************************** interface.gotpl ***************************
@@ -2631,6 +2938,45 @@ func (ec *executionContext) _Download(ctx context.Context, sel ast.SelectionSet,
 	return out
 }
 
+var mutationImplementors = []string{"Mutation"}
+
+func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, mutationImplementors)
+	ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{
+		Object: "Mutation",
+	})
+
+	out := graphql.NewFieldSet(fields)
+	var invalids uint32
+	for i, field := range fields {
+		innerCtx := graphql.WithRootFieldContext(ctx, &graphql.RootFieldContext{
+			Object: field.Name,
+			Field:  field,
+		})
+
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Mutation")
+		case "addDownload":
+
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_addDownload(ctx, field)
+			})
+
+			if out.Values[i] == graphql.Null {
+				invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch()
+	if invalids > 0 {
+		return graphql.Null
+	}
+	return out
+}
+
 var queryImplementors = []string{"Query"}
 
 func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -2691,6 +3037,26 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 		return graphql.Null
 	}
 	return out
+}
+
+var subscriptionImplementors = []string{"Subscription"}
+
+func (ec *executionContext) _Subscription(ctx context.Context, sel ast.SelectionSet) func(ctx context.Context) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, subscriptionImplementors)
+	ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{
+		Object: "Subscription",
+	})
+	if len(fields) != 1 {
+		ec.Errorf(ctx, "must subscribe to exactly one stream")
+		return nil
+	}
+
+	switch fields[0].Name {
+	case "subscribeDownloads":
+		return ec._Subscription_subscribeDownloads(ctx, fields[0])
+	default:
+		panic("unknown field " + strconv.Quote(fields[0].Name))
+	}
 }
 
 var __DirectiveImplementors = []string{"__Directive"}
@@ -3024,6 +3390,15 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) unmarshalNCreateDownload2githubᚗcomᚋkjuulhᚋscelᚋserverᚋinternalᚋgeneratedᚋgraphqlᚐCreateDownload(ctx context.Context, v interface{}) (CreateDownload, error) {
+	res, err := ec.unmarshalInputCreateDownload(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDownload2githubᚗcomᚋkjuulhᚋscelᚋserverᚋinternalᚋgeneratedᚋgraphqlᚐDownload(ctx context.Context, sel ast.SelectionSet, v Download) graphql.Marshaler {
+	return ec._Download(ctx, sel, &v)
 }
 
 func (ec *executionContext) marshalNDownload2ᚖgithubᚗcomᚋkjuulhᚋscelᚋserverᚋinternalᚋgeneratedᚋgraphqlᚐDownload(ctx context.Context, sel ast.SelectionSet, v *Download) graphql.Marshaler {
