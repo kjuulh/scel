@@ -1,5 +1,5 @@
 # syntax = docker/dockerfile:1-experimental
-FROM golang:1.18-alpine3.15 AS base
+FROM golang:1.19-alpine3.15 AS base
 
 RUN apk --no-cache --update-cache --upgrade --latest add build-base git gcc bash
 
@@ -22,7 +22,7 @@ ARG BUILD_DATE
 RUN --mount=type=cache,target=/root/.cache/go-build go build \
   -o /usr/bin/scel
 
-FROM alpine:3.15.4
+FROM alpine:3.19.1
 
 RUN addgroup -S scel; \
   adduser -S scel -G scel -D -u 10000 -h /home/scel -s /bin/nologin; \

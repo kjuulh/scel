@@ -3,13 +3,13 @@ module github.com/kjuulh/scel/server
 go 1.18
 
 require (
-	github.com/99designs/gqlgen v0.17.12
-	github.com/google/uuid v1.3.0
-	github.com/gorilla/websocket v1.5.0
-	github.com/ravilushqa/otelgqlgen v0.8.0
-	github.com/spf13/cobra v1.5.0
-	github.com/uptrace/opentelemetry-go-extra/otelzap v0.1.14
-	github.com/vektah/gqlparser/v2 v2.4.6
+	github.com/99designs/gqlgen v0.17.45
+	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.1
+	github.com/ravilushqa/otelgqlgen v0.15.0
+	github.com/spf13/cobra v1.8.0
+	github.com/uptrace/opentelemetry-go-extra/otelzap v0.2.4
+	github.com/vektah/gqlparser/v2 v2.5.11
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.32.0
 	go.opentelemetry.io/otel v1.7.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric v0.30.0
@@ -20,9 +20,9 @@ require (
 	go.opentelemetry.io/otel/sdk v1.7.0
 	go.opentelemetry.io/otel/sdk/metric v0.30.0
 	go.opentelemetry.io/otel/trace v1.7.0
-	go.uber.org/zap v1.21.0
-	golang.org/x/net v0.0.0-20211015210444-4f30a5c0130f
-	google.golang.org/grpc v1.46.0
+	go.uber.org/zap v1.27.0
+	golang.org/x/net v0.22.0
+	google.golang.org/grpc v1.62.1
 )
 
 require (
